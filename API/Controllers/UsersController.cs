@@ -6,6 +6,7 @@ using API.Data;
 using API.DTOs;
 using API.Entities;
 using API.Extensions;
+using API.Helpers;
 using API.Interfaces;
 using AutoMapper;
 using Microsoft.AspNetCore.Authorization;
@@ -33,9 +34,15 @@ namespace API.Controllers
 
         [HttpGet]
 
-        public async Task<ActionResult<IEnumerable<MemberDto>>> GetUsers()
+        public async Task<ActionResult<IEnumerable<MemberDto>>> GetUsers([FromQuery]UserParams userParams)
         {
-            var users = await _userRepository.GetMembersAsync();
+            var user = await _userRepository.GetUserByUsernameAsync(User.GetUsername());
+            userParams.CurrentUsername =  User.GetUsername();
+            if (string.IsNullOrEmpty(userParams.Gender))
+               userParams.Gender = user.Gender == "male" ? "female" : "male";
+
+            var users = await _userRepository.GetMembersAsync(userParams);
+            Response.AddPaginationHeader(users.CurrentPage, users.PageSize, users.TotalCount ,users.TotalPages);
 
             return Ok(users);
 
@@ -52,7 +59,6 @@ namespace API.Controllers
         [HttpPut]
         public async Task<ActionResult> UpdateUser(MemberUpdateDto memberUpdateDto)
         {
-            var username = User.GetUsername();
             var user = await _userRepository.GetUserByUsernameAsync(User.GetUsername());
 
             _mapper.Map(memberUpdateDto, user);
@@ -68,11 +74,11 @@ namespace API.Controllers
             var user = await _userRepository.GetUserByUsernameAsync(User.GetUsername());
             var result = await _photoService.AddPhotoAsync(file);
 
-            if(result.Error !=null) return BadRequest(result.Error.Message);
+            if(result.Error != null) return BadRequest(result.Error.Message);
 
             var photo = new Photo
             {
-                Url =result.SecureUrl.AbsoluteUri,
+                Url = result.SecureUrl.AbsoluteUri,
                 PublicId = result.PublicId
             };
 
@@ -87,8 +93,7 @@ namespace API.Controllers
                   return CreatedAtRoute("GetUser", new { username = user.UserName} ,
                     _mapper.Map<PhotoDto>(photo));
               }
-
-            return BadRequest("Problem Adding photo");
+                  return BadRequest("Problem Adding photo");
         }
 
         [HttpPut("set-main-photo/{photoId}")]
